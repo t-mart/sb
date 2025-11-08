@@ -1,0 +1,20 @@
+[project]
+name = "sb"
+version = "0.1.0"
+description = "Stuff to manage the way I use qbittorrent"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "bencode-py>=4.0.0",
+    "click>=8.3.0",
+    "httpx>=0.28.1",
+    "pydantic>=2.12.4",
+    "qbittorrent-api>=2025.7.0",
+    "toml>=0.10.2",
+]
+
+[tool.uv]
+package = true
+
+[project.scripts]
+sb = "sb.__main__:sb"
