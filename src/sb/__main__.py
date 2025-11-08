@@ -26,7 +26,10 @@ def sb():
     help="Specify which clients to add to",
     required=True,
 )
-def add(torrent_dir: Path, client: tuple[str]):
+@click.option(
+    "--dry-run", is_flag=True, help="Show what would be done without making changes"
+)
+def add(torrent_dir: Path, client: tuple[str], dry_run: bool):
     """Add all torrents in TORRENT_DIR to specified clients."""
     config = Config.load_from_file()
 
@@ -72,6 +75,9 @@ def add(torrent_dir: Path, client: tuple[str]):
                 )
                 continue
 
+            if dry_run:
+                click.echo("\t\tℹ️ Dry run, not adding", err=True)
+                continue
             add_response = cast(
                 AddResponse,
                 qb_client.torrents_add(
@@ -101,7 +107,10 @@ def add(torrent_dir: Path, client: tuple[str]):
     "to_client",
     type=str,
 )
-def cp(from_client: str, to_client: str):
+@click.option(
+    "--dry-run", is_flag=True, help="Show what would be done without making changes"
+)
+def cp(from_client: str, to_client: str, dry_run: bool):
     """Copy all torrents from FROM_CLIENT to TO_CLIENT."""
     config = Config.load_from_file()
     from_client_config = get_client_config(config, from_client)
@@ -135,20 +144,26 @@ def cp(from_client: str, to_client: str):
     from_torrents = from_qb.torrents_info(category=from_client_config.category)
     to_torrents = to_qb.torrents_info(category=to_client_config.category)
 
+    torrent_map = {t.hash: t for t in from_torrents}
+
     from_hashes = {t.hash for t in from_torrents}
     to_hashes = {t.hash for t in to_torrents}
 
     missing_hashes = from_hashes - to_hashes
 
     for missing_hash in missing_hashes:
-        torrent = from_qb.torrents_export(torrent_hash=missing_hash)
+        torrent_data = from_qb.torrents_export(torrent_hash=missing_hash)
+        torrent = torrent_map[missing_hash]
+        click.echo(f"\tAdding torrent: {torrent.name}", err=True)
 
-        click.echo(f"\tAdding torrent {missing_hash}", err=True)
+        if dry_run:
+            click.echo("\t\tℹ️ Dry run, not adding", err=True)
+            continue
 
         add_response = cast(
             AddResponse,
             to_qb.torrents_add(
-                torrent_files=torrent,
+                torrent_files=torrent_data,
                 is_paused=True,
                 category=to_client_config.category,
             ),
