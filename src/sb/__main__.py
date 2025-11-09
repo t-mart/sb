@@ -1,6 +1,5 @@
 from pathlib import Path
 from typing import get_args
-from collections import defaultdict
 
 import click
 from qbittorrentapi.torrents import TorrentStatusesT
@@ -40,7 +39,7 @@ def add(torrent_dir: Path, client: tuple[str], delete_after: bool, dry_run: bool
     config = Config.load_from_file()
 
     torrent_paths = list(torrent_dir.glob("*.torrent"))
-    deleteable: dict[Path, bool] = defaultdict(lambda: True)
+    deleteable: dict[Path, bool] = {path: True for path in torrent_paths}
 
     for client_name in client:
         client_config = get_client_config(config, client_name)
