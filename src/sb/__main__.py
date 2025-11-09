@@ -227,6 +227,43 @@ def recheck(client: tuple[str], status: TorrentStatusesT | None):
                 qb_client.start_recheck(torrent.hash)
 
 
+@sb.command()
+@click.option(
+    "--client",
+    "-c",
+    multiple=True,
+    help="Specify which clients to add to",
+    required=True,
+)
+@click.option(
+    "--status",
+    "-s",
+    type=click.Choice(get_args(TorrentStatusesT)),
+    default=None,
+    help="Filter torrents by status",
+)
+def start(client: tuple[str], status: TorrentStatusesT | None):
+    """Start all torrents in specified CLIENT(s)."""
+    config = Config.load_from_file()
+
+    for client_name in client:
+        client_config = get_client_config(config, client_name)
+
+        with QBittorrentClient(
+            host=client_config.url,
+            username=client_config.username,
+            password=client_config.password,
+            category=client_config.category,
+        ) as qb_client:
+            click.echo(f"Client '{client_name}'", err=True)
+
+            torrents = qb_client.list_torrents(status=status)
+
+            for torrent in torrents:
+                click.echo(f"\tStarting torrent {torrent.name}", err=True)
+                qb_client.start(torrent.hash)
+
+
 def get_client_config(config: Config, client_name: str):
     try:
         return config.clients[client_name]

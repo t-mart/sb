@@ -74,3 +74,8 @@ class QBittorrentClient:
     def export(self, hash_hex: str) -> bytes:
         """Export the raw torrent data for the torrent with the given hash."""
         return self.client.torrents_export(torrent_hash=hash_hex)
+    
+
+    def start(self, hash_hex: str):
+        """Start the torrent with the given hash."""
+        self.client.torrents_start(hashes=hash_hex)
