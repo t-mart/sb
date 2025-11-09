@@ -205,7 +205,10 @@ def ls(client: str, status: TorrentStatusesT | None):
     default=None,
     help="Filter torrents by status",
 )
-def recheck(client: tuple[str], status: TorrentStatusesT | None):
+@click.option(
+    "--dry-run", is_flag=True, help="Show what would be done without making changes"
+)
+def recheck(client: tuple[str], status: TorrentStatusesT | None, dry_run: bool):
     """Recheck all torrents in specified CLIENT(s)."""
     config = Config.load_from_file()
 
@@ -223,8 +226,13 @@ def recheck(client: tuple[str], status: TorrentStatusesT | None):
             torrents = qb_client.list_torrents(status=status)
 
             for torrent in torrents:
-                click.echo(f"\tRechecking torrent {torrent.name}", err=True)
-                qb_client.start_recheck(torrent.hash)
+                if not dry_run:
+                    qb_client.start_recheck(torrent.hash)
+                    click.echo(f"\t🔍 Started recheck of {torrent.name}", err=True)
+                else:
+                    click.echo(
+                        f"\tℹ️ Dry run, not starting recheck of {torrent.name}", err=True
+                    )
 
 
 @sb.command()
@@ -242,7 +250,10 @@ def recheck(client: tuple[str], status: TorrentStatusesT | None):
     default=None,
     help="Filter torrents by status",
 )
-def start(client: tuple[str], status: TorrentStatusesT | None):
+@click.option(
+    "--dry-run", is_flag=True, help="Show what would be done without making changes"
+)
+def start(client: tuple[str], status: TorrentStatusesT | None, dry_run: bool):
     """Start all torrents in specified CLIENT(s)."""
     config = Config.load_from_file()
 
@@ -260,8 +271,13 @@ def start(client: tuple[str], status: TorrentStatusesT | None):
             torrents = qb_client.list_torrents(status=status)
 
             for torrent in torrents:
-                click.echo(f"\tStarting torrent {torrent.name}", err=True)
-                qb_client.start(torrent.hash)
+                if not dry_run:
+                    click.echo(f"\t🏃‍➡️ Starting torrent {torrent.name}", err=True)
+                    qb_client.start(torrent.hash)
+                else:
+                    click.echo(
+                        f"\tℹ️ Dry run, not starting torrent {torrent.name}", err=True
+                    )
 
 
 def get_client_config(config: Config, client_name: str):
