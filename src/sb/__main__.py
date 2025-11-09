@@ -1,13 +1,12 @@
 from pathlib import Path
-from typing import Literal, cast
+from typing import get_args
 
 import click
-from qbittorrentapi import Client
+from qbittorrentapi.torrents import TorrentStatusesT
 
 from sb.config import Config
 from sb.torrent import Torrent
-
-type AddResponse = Literal["Ok.", "Fails."]
+from sb.client import QBittorrentClient, FailedAddException
 
 
 @click.group()
@@ -37,65 +36,44 @@ def add(torrent_dir: Path, client: tuple[str], dry_run: bool):
 
     for client_name in client:
         client_config = get_client_config(config, client_name)
-        qb_client = Client(
+        with QBittorrentClient(
             host=client_config.url,
             username=client_config.username,
             password=client_config.password,
-        )
-        qb_client.auth_log_in()
-        click.echo(f"Client '{client_name}'", err=True)
+            category=client_config.category,
+        ) as qb_client:
+            click.echo(f"Client '{client_name}'", err=True)
 
-        category = client_config.category
-        if not has_category(qb_client, category):
-            raise click.ClickException(
-                f"Category '{category}' does not exist on client '{client_name}'."
-            )
+            existing_torrents = qb_client.list_torrents()
+            existing_hashes = {t.hash for t in existing_torrents}
 
-        existing_torrents = qb_client.torrents_info(category=category)
-
-        existing_v1_infohashes = {t.infohash_v1 for t in existing_torrents}
-        existing_v2_infohashes = {t.infohash_v2 for t in existing_torrents}
-        for torrent_path in torrent_paths:
-            click.echo(
-                f"\tAdding torrent {torrent_path}",
-                err=True,
-            )
-            torrent = Torrent.from_file(torrent_path)
-            already_exists = (
-                torrent.infohash_v1_hex
-                and torrent.infohash_v1_hex in existing_v1_infohashes
-            ) or (
-                torrent.infohash_v2_hex
-                and torrent.infohash_v2_hex in existing_v2_infohashes
-            )
-            if already_exists:
+            for torrent_path in torrent_paths:
                 click.echo(
-                    "\t\t⚠️ Already exists, skipping",
+                    f"\tAdding torrent {torrent_path}",
                     err=True,
                 )
-                continue
+                torrent = Torrent.from_file(torrent_path)
+                torrent_hash = torrent.infohash_v1.hex()
+                print(torrent_hash)
+                if torrent_hash in existing_hashes:
+                    click.echo(
+                        "\t\t⚠️ Already exists, skipping",
+                        err=True,
+                    )
+                    continue
 
-            if dry_run:
-                click.echo("\t\tℹ️ Dry run, not adding", err=True)
-                continue
-            add_response = cast(
-                AddResponse,
-                qb_client.torrents_add(
-                    torrent_files=str(torrent_path),
-                    is_paused=True,
-                    category=category,
-                ),
-            )
-            if add_response == "Fails.":
-                click.echo("\t\t❌ Failed to add", err=True)
-            else:
+                if dry_run:
+                    click.echo("\t\tℹ️ Dry run, not adding", err=True)
+                    continue
+
+                try:
+                    qb_client.add_paused_torrent_by_path(torrent_path)
+                except FailedAddException:
+                    click.echo("\t\t❌ Failed to add", err=True)
+
                 click.echo("\t\t✅ Added successfully", err=True)
-                qb_client.torrents_recheck(
-                    hashes=[torrent.infohash_v1_hex or torrent.infohash_v2_hex]
-                )
+                qb_client.start_recheck(torrent_hash)
                 click.echo("\t\t🔍 Started recheck", err=True)
-
-        qb_client.auth_log_out()
 
 
 @sb.command()
@@ -116,65 +94,80 @@ def cp(from_client: str, to_client: str, dry_run: bool):
     from_client_config = get_client_config(config, from_client)
     to_client_config = get_client_config(config, to_client)
 
-    from_qb = Client(
-        host=from_client_config.url,
-        username=from_client_config.username,
-        password=from_client_config.password,
-    )
-    to_qb = Client(
-        host=to_client_config.url,
-        username=to_client_config.username,
-        password=to_client_config.password,
-    )
+    with (
+        QBittorrentClient(
+            host=from_client_config.url,
+            username=from_client_config.username,
+            password=from_client_config.password,
+            category=from_client_config.category,
+        ) as from_qb,
+        QBittorrentClient(
+            host=to_client_config.url,
+            username=to_client_config.username,
+            password=to_client_config.password,
+            category=to_client_config.category,
+        ) as to_qb,
+    ):
+        click.echo(f"Copying torrents from '{from_client}' to '{to_client}'", err=True)
 
-    from_qb.auth_log_in()
-    to_qb.auth_log_in()
+        from_torrents = from_qb.list_torrents()
+        to_torrents = to_qb.list_torrents()
 
-    click.echo(f"Copying torrents from '{from_client}' to '{to_client}'", err=True)
+        from_torrent_map = {t.hash: t for t in from_torrents}
 
-    if not has_category(from_qb, from_client_config.category):
-        raise click.ClickException(
-            f"Category '{from_client_config.category}' does not exist on client '{from_client}'."
-        )
-    if not has_category(to_qb, to_client_config.category):
-        raise click.ClickException(
-            f"Category '{to_client_config.category}' does not exist on client '{to_client}'."
-        )
+        from_hashes = {t.hash for t in from_torrents}
+        to_hashes = {t.hash for t in to_torrents}
 
-    from_torrents = from_qb.torrents_info(category=from_client_config.category)
-    to_torrents = to_qb.torrents_info(category=to_client_config.category)
+        missing_hashes = from_hashes - to_hashes
 
-    torrent_map = {t.hash: t for t in from_torrents}
+        for missing_hash in missing_hashes:
+            torrent_data = from_qb.export(hash_hex=missing_hash)
+            torrent = from_torrent_map[missing_hash]
+            click.echo(f"\tAdding torrent: {torrent.name}", err=True)
 
-    from_hashes = {t.hash for t in from_torrents}
-    to_hashes = {t.hash for t in to_torrents}
+            if dry_run:
+                click.echo("\t\tℹ️ Dry run, not adding", err=True)
+                continue
 
-    missing_hashes = from_hashes - to_hashes
-
-    for missing_hash in missing_hashes:
-        torrent_data = from_qb.torrents_export(torrent_hash=missing_hash)
-        torrent = torrent_map[missing_hash]
-        click.echo(f"\tAdding torrent: {torrent.name}", err=True)
-
-        if dry_run:
-            click.echo("\t\tℹ️ Dry run, not adding", err=True)
-            continue
-
-        add_response = cast(
-            AddResponse,
-            to_qb.torrents_add(
-                torrent_files=torrent_data,
-                is_paused=True,
-                category=to_client_config.category,
-            ),
-        )
-
-        if add_response == "Fails.":
-            click.echo("\t\t❌ Failed to add", err=True)
-        else:
+            try:
+                to_qb.add_paused_torrent_by_data(
+                    torrent_data,
+                )
+            except FailedAddException:
+                click.echo("\t\t❌ Failed to add", err=True)
+                continue
             click.echo("\t\t✅ Added successfully", err=True)
-            to_qb.torrents_recheck(hashes=[missing_hash])
+            to_qb.start_recheck(hash_hex=missing_hash)
             click.echo("\t\t🔍 Started recheck", err=True)
+
+
+@sb.command()
+@click.argument(
+    "client",
+    type=str,
+)
+@click.option(
+    "--status",
+    "-s",
+    type=click.Choice(get_args(TorrentStatusesT)),
+    default=None,
+    help="Filter torrents by status",
+)
+def ls(client: str, status: TorrentStatusesT | None):
+    """List all torrents in CLIENT."""
+    config = Config.load_from_file()
+    client_config = get_client_config(config, client)
+
+    with QBittorrentClient(
+        host=client_config.url,
+        username=client_config.username,
+        password=client_config.password,
+        category=client_config.category,
+    ) as qb_client:
+        existing_torrents = qb_client.list_torrents(status=status)
+
+        for torrent in existing_torrents:
+            click.echo(f"{torrent.name} ({torrent.hash})", err=True)
 
 
 def get_client_config(config: Config, client_name: str):
@@ -184,7 +177,3 @@ def get_client_config(config: Config, client_name: str):
         raise click.ClickException(
             f"Client '{client_name}' not found in configuration."
         )
-
-
-def has_category(client: Client, category: str | None) -> bool:
-    return category is None or category in client.torrents_categories()

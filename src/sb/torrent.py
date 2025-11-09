@@ -39,9 +39,8 @@ class Torrent:
     name: Path
     files: list[TorrentFile]
     piece_length: int
-    infohash_v1: bytes | None  # v1 info hash (20 bytes)
-    infohash_v2: bytes | None  # v2 info hash (32 bytes)
-    pieces: list[bytes] | None  # v1 piece hashes (20 bytes each)
+    infohash_v1: bytes  # we only support v1 for now
+    pieces: list[bytes]
 
     @classmethod
     def from_file(cls, file_path: Path):
@@ -56,27 +55,16 @@ class Torrent:
         raw_info_bencoded = bencodepy.encode(info)
 
         # --- Detect v1/v2 and calculate info hashes ---
-        infohash_v1: bytes | None = None
-        infohash_v2: bytes | None = None
         pieces: list[bytes] | None = None
 
         # Check for v1 (BEP 3)
-        if b"pieces" in info:
-            infohash_v1 = hashlib.sha1(raw_info_bencoded).digest()
+        if b"pieces" not in info:
+            raise ValueError("Unsupported torrent: missing 'pieces' for v1 torrent.")
+        infohash_v1 = hashlib.sha1(raw_info_bencoded).digest()
 
-            # Parse the v1 piece hashes
-            pieces_value = info.get(b"pieces")
-            pieces = [pieces_value[i : i + 20] for i in range(0, len(pieces_value), 20)]
-
-        # Check for v2 (BEP 52)
-        if b"file tree" in info:
-            infohash_v2 = hashlib.sha256(raw_info_bencoded).digest()
-
-        if not (infohash_v1 or infohash_v2):
-            raise ValueError(
-                "Invalid torrent: no v1 ('pieces') or v2 ('file tree') metadata found."
-            )
-        # -----------------------------------------------
+        # Parse the v1 piece hashes
+        pieces_value = info.get(b"pieces")
+        pieces = [pieces_value[i : i + 20] for i in range(0, len(pieces_value), 20)]
 
         name = Path(info.get(b"name").decode("utf-8"))
         piece_length = info.get(b"piece length")
@@ -98,20 +86,9 @@ class Torrent:
             pieces=pieces,
             files=files,
             infohash_v1=infohash_v1,
-            infohash_v2=infohash_v2,
         )
 
     @property
     def size(self) -> int:
         """Total size of all files in the torrent."""
         return sum(file.length for file in self.files)
-    
-    @property
-    def infohash_v1_hex(self) -> str | None:
-        """Hex-encoded v1 info hash, if available."""
-        return self.infohash_v1.hex() if self.infohash_v1 else None
-    
-    @property
-    def infohash_v2_hex(self) -> str | None:
-        """Hex-encoded v2 info hash, if available."""
-        return self.infohash_v2.hex() if self.infohash_v2 else None
