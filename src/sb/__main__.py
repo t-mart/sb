@@ -29,6 +29,7 @@ def sb():
 @click.option(
     "--delete-after",
     is_flag=True,
+    default=False,
     help="Delete torrent file after successfully adding or being skipped due to already existing by all clients",
 )
 @click.option(
