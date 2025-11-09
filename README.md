@@ -51,3 +51,37 @@ Example:
 ```sh
 sb cp foo bar
 ```
+
+### `ls`
+
+List all torrents in a given qbittorrent instance.
+
+Example:
+
+```sh
+sb ls foo
+```
+
+### `recheck`
+
+Given a qbittorrent instance, start a recheck on all torrents in it.
+
+Takes a `--status` option to filter which torrents to recheck.
+
+Example:
+
+```sh
+sb recheck foo --status paused
+```
+
+### `start`
+
+Given a qbittorrent instance, start all torrents in it.
+
+Takes a `--status` option to filter which torrents to start.
+
+Example:
+
+```sh
+sb start foo --status paused
+```
