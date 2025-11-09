@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import get_args
+from collections import defaultdict
 
 import click
 from qbittorrentapi.torrents import TorrentStatusesT
@@ -26,13 +27,19 @@ def sb():
     required=True,
 )
 @click.option(
+    '--delete-after',
+    is_flag=True,
+    help="Delete torrent file after adding",
+)
+@click.option(
     "--dry-run", is_flag=True, help="Show what would be done without making changes"
 )
-def add(torrent_dir: Path, client: tuple[str], dry_run: bool):
+def add(torrent_dir: Path, client: tuple[str], delete_after: bool, dry_run: bool):
     """Add all torrents in TORRENT_DIR to specified clients."""
     config = Config.load_from_file()
 
     torrent_paths = list(torrent_dir.glob("*.torrent"))
+    deleteable: dict[Path, bool] = defaultdict(lambda: True)
 
     for client_name in client:
         client_config = get_client_config(config, client_name)
@@ -70,10 +77,23 @@ def add(torrent_dir: Path, client: tuple[str], dry_run: bool):
                     qb_client.add_paused_torrent_by_path(torrent_path)
                 except FailedAddException:
                     click.echo("\t\t❌ Failed to add", err=True)
+                    deleteable[torrent_path] = False
+                    continue
 
                 click.echo("\t\t✅ Added successfully", err=True)
                 qb_client.start_recheck(torrent_hash)
                 click.echo("\t\t🔍 Started recheck", err=True)
+
+    if delete_after and not dry_run:
+        for torrent_path, can_delete in deleteable.items():
+            if can_delete:
+                click.echo(f"🗑️ Deleting {torrent_path}", err=True)
+                torrent_path.unlink()
+            else:
+                click.echo(
+                    f"Not deleting {torrent_path} due to previous errors",
+                    err=True,
+                )
 
 
 @sb.command()
