@@ -1,6 +1,6 @@
 # sb
 
-Stuff to manage the way I use qbittorrent
+CLI for driving QBittorrent instances. Easier if you have a lot of torrents!
 
 ## Config
 
