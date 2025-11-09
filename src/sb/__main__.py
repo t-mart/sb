@@ -27,9 +27,9 @@ def sb():
     required=True,
 )
 @click.option(
-    '--delete-after',
+    "--delete-after",
     is_flag=True,
-    help="Delete torrent file after adding",
+    help="Delete torrent file after successfully adding or being skipped due to already existing by all clients",
 )
 @click.option(
     "--dry-run", is_flag=True, help="Show what would be done without making changes"
