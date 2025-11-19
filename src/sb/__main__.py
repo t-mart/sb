@@ -197,6 +197,15 @@ def ls(client: str, hashes: tuple[str], status: TorrentStatusesT | None):
         click.echo(json.dumps(json_list, indent=4))
 
 
+# This is not an actual status in qbittorrentapi, but it's a useful state to know about
+# for us: it's when a torrent has completed (either via download or recheck), but is
+# stopped and not seeding. None of the qbittorrentapi statuses capture this exactly.
+type RecheckTorrentStatusesT = TorrentStatusesT | Literal["downloading_stopped"]
+
+# ugh, get_args does not work nicely on Literal unions
+recheck_torrent_statuses = list(get_args(TorrentStatusesT)) + ["downloading_stopped"]
+
+
 @sb.command()
 @click.argument(
     "client",
@@ -204,14 +213,14 @@ def ls(client: str, hashes: tuple[str], status: TorrentStatusesT | None):
 @click.option(
     "--status",
     "-s",
-    type=click.Choice(get_args(TorrentStatusesT)),
+    type=click.Choice(recheck_torrent_statuses),
     default=None,
     help="Filter torrents by status",
 )
 @click.option(
     "--dry-run", is_flag=True, help="Show what would be done without making changes"
 )
-def recheck(client: str, status: TorrentStatusesT | None, dry_run: bool):
+def recheck(client: str, status: RecheckTorrentStatusesT | None, dry_run: bool):
     """
     Recheck all torrents in specified CLIENT. CLIENT may be a single client or many
     separated by commas.
@@ -229,9 +238,16 @@ def recheck(client: str, status: TorrentStatusesT | None, dry_run: bool):
         ) as qb_client:
             click.echo(f"Client '{client_name}'", err=True)
 
+            downloading_stopped = False
+            if status == "downloading_stopped":
+                downloading_stopped = True
+                status = None
+
             torrents = qb_client.list_torrents(status=status)
 
             for torrent in torrents:
+                if downloading_stopped and torrent.state != "stoppedDL":
+                    continue
                 if not dry_run:
                     qb_client.start_recheck(torrent.hash)
                     click.echo(f"\t🔍 Started recheck of {torrent.name}", err=True)
