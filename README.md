@@ -1,6 +1,8 @@
 # sb
 
-CLI for driving QBittorrent instances. Easier if you have a lot of torrents!
+CLI for driving QBittorrent instances. The web UI is fine, but tedious for
+performing bulk operations across multiple instances. `sb` unlocks the
+expressivity of scripting for these operations.
 
 ## Config
 
@@ -19,6 +21,12 @@ username = "user"
 password = "pass"
 ```
 
+Clients identify instances of qBittorrent running the web UI. Each client has a name
+(like `foo` or `bar` above) and connection details.
+
+You may also provide a category for a client. Doing so isolates all operations to
+that category. (This helps me because I utilize categories in my workflow.)
+
 ## Subcommands
 
 ### `add`
@@ -29,10 +37,14 @@ paused state. After adding, run a recheck on each newly-added torrent.
 This is helpful when new torrents are created or downloaded and we want to add
 them.
 
-Example:
+Examples:
 
 ```sh
-sb add ~/torrents --client foo --client bar --client baz
+sb add foo path/to/a.torrent
+```
+
+```sh
+sb add foo,bar path/to/*.torrent
 ```
 
 ### `cp`

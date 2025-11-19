@@ -17,10 +17,13 @@ def sb():
 
 @sb.command()
 @click.argument(
-    "torrent_dir", type=click.Path(exists=True, file_okay=False, path_type=Path)
-)
-@click.option(
     "client",
+)
+@click.argument(
+    "torrent",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, path_type=Path),
+    required=False,
+    nargs=-1,
 )
 @click.option(
     "--delete-after",
@@ -31,15 +34,14 @@ def sb():
 @click.option(
     "--dry-run", is_flag=True, help="Show what would be done without making changes"
 )
-def add(torrent_dir: Path, client: str, delete_after: bool, dry_run: bool):
+def add(client: str, torrent: tuple[Path], delete_after: bool, dry_run: bool):
     """
-    Add all torrents in TORRENT_DIR to CLIENT. CLIENT may be a single client or many
-    separated by commas.
+    Add TORRENT to CLIENT. CLIENT may be a single client or many separated by commas. One or more
+    TORRENT files may be provided.
     """
     config = Config.load_from_file()
 
-    torrent_paths = list(torrent_dir.glob("*.torrent"))
-    deleteable: dict[Path, bool] = {path: True for path in torrent_paths}
+    deleteable: dict[Path, bool] = {path: True for path in torrent}
 
     for client_name in client.split(","):
         client_config = get_client_config(config, client_name)
@@ -54,13 +56,13 @@ def add(torrent_dir: Path, client: str, delete_after: bool, dry_run: bool):
             existing_torrents = qb_client.list_torrents()
             existing_hashes = {t.hash for t in existing_torrents}
 
-            for torrent_path in torrent_paths:
+            for torrent_path in torrent:
                 click.echo(
                     f"\tAdding torrent {torrent_path}",
                     err=True,
                 )
-                torrent = Torrent.from_file(torrent_path)
-                torrent_hash = torrent.infohash_v1.hex()
+                t = Torrent.from_file(torrent_path)
+                torrent_hash = t.infohash_v1.hex()
                 print(torrent_hash)
                 if torrent_hash in existing_hashes:
                     click.echo(
@@ -180,7 +182,7 @@ def cp(from_client: str, to_client: str, dry_run: bool):
     help="Filter torrents by status",
 )
 def ls(client: str, hashes: tuple[str], status: TorrentStatusesT | None):
-    """List all torrents in CLIENT. May provide multiple HASHES to select specific torrents."""
+    """List all torrents in CLIENT. May provide zero or more HASHES to select specific torrents."""
     config = Config.load_from_file()
     client_config = get_client_config(config, client)
 
@@ -196,7 +198,7 @@ def ls(client: str, hashes: tuple[str], status: TorrentStatusesT | None):
 
 
 @sb.command()
-@click.option(
+@click.argument(
     "client",
 )
 @click.option(
@@ -249,7 +251,7 @@ start_torrent_statuses = list(get_args(TorrentStatusesT)) + ["completed_stopped"
 
 
 @sb.command()
-@click.option(
+@click.argument(
     "client",
 )
 @click.option(
