@@ -1,5 +1,6 @@
 from pathlib import Path
-from typing import get_args
+from typing import get_args, Literal
+import json
 
 import click
 from qbittorrentapi.torrents import TorrentStatusesT
@@ -19,11 +20,7 @@ def sb():
     "torrent_dir", type=click.Path(exists=True, file_okay=False, path_type=Path)
 )
 @click.option(
-    "--client",
-    "-c",
-    multiple=True,
-    help="Specify which clients to add to",
-    required=True,
+    "client",
 )
 @click.option(
     "--delete-after",
@@ -34,14 +31,17 @@ def sb():
 @click.option(
     "--dry-run", is_flag=True, help="Show what would be done without making changes"
 )
-def add(torrent_dir: Path, client: tuple[str], delete_after: bool, dry_run: bool):
-    """Add all torrents in TORRENT_DIR to specified clients."""
+def add(torrent_dir: Path, client: str, delete_after: bool, dry_run: bool):
+    """
+    Add all torrents in TORRENT_DIR to CLIENT. CLIENT may be a single client or many
+    separated by commas.
+    """
     config = Config.load_from_file()
 
     torrent_paths = list(torrent_dir.glob("*.torrent"))
     deleteable: dict[Path, bool] = {path: True for path in torrent_paths}
 
-    for client_name in client:
+    for client_name in client.split(","):
         client_config = get_client_config(config, client_name)
         with QBittorrentClient(
             host=client_config.url,
@@ -141,7 +141,7 @@ def cp(from_client: str, to_client: str, dry_run: bool):
         missing_hashes = from_hashes - to_hashes
 
         for missing_hash in missing_hashes:
-            torrent_data = from_qb.export(hash_hex=missing_hash)
+            torrent_data = from_qb.export(hashes=missing_hash)
             torrent = from_torrent_map[missing_hash]
             click.echo(f"\tAdding torrent: {torrent.name}", err=True)
 
@@ -157,7 +157,7 @@ def cp(from_client: str, to_client: str, dry_run: bool):
                 click.echo("\t\t❌ Failed to add", err=True)
                 continue
             click.echo("\t\t✅ Added successfully", err=True)
-            to_qb.start_recheck(hash_hex=missing_hash)
+            to_qb.start_recheck(hashes=missing_hash)
             click.echo("\t\t🔍 Started recheck", err=True)
 
 
@@ -166,6 +166,12 @@ def cp(from_client: str, to_client: str, dry_run: bool):
     "client",
     type=str,
 )
+@click.argument(
+    "hashes",
+    type=str,
+    required=False,
+    nargs=-1,
+)
 @click.option(
     "--status",
     "-s",
@@ -173,8 +179,8 @@ def cp(from_client: str, to_client: str, dry_run: bool):
     default=None,
     help="Filter torrents by status",
 )
-def ls(client: str, status: TorrentStatusesT | None):
-    """List all torrents in CLIENT."""
+def ls(client: str, hashes: tuple[str], status: TorrentStatusesT | None):
+    """List all torrents in CLIENT. May provide multiple HASHES to select specific torrents."""
     config = Config.load_from_file()
     client_config = get_client_config(config, client)
 
@@ -184,19 +190,14 @@ def ls(client: str, status: TorrentStatusesT | None):
         password=client_config.password,
         category=client_config.category,
     ) as qb_client:
-        existing_torrents = qb_client.list_torrents(status=status)
-
-        for torrent in existing_torrents:
-            click.echo(f"{torrent.name} ({torrent.hash})", err=True)
+        torrents = qb_client.list_torrents(status=status, hashes=hashes)
+        json_list = [dict(t) for t in torrents]
+        click.echo(json.dumps(json_list, indent=4))
 
 
 @sb.command()
 @click.option(
-    "--client",
-    "-c",
-    multiple=True,
-    help="Specify which clients to add to",
-    required=True,
+    "client",
 )
 @click.option(
     "--status",
@@ -208,11 +209,14 @@ def ls(client: str, status: TorrentStatusesT | None):
 @click.option(
     "--dry-run", is_flag=True, help="Show what would be done without making changes"
 )
-def recheck(client: tuple[str], status: TorrentStatusesT | None, dry_run: bool):
-    """Recheck all torrents in specified CLIENT(s)."""
+def recheck(client: str, status: TorrentStatusesT | None, dry_run: bool):
+    """
+    Recheck all torrents in specified CLIENT. CLIENT may be a single client or many
+    separated by commas.
+    """
     config = Config.load_from_file()
 
-    for client_name in client:
+    for client_name in client.split(","):
         client_config = get_client_config(config, client_name)
 
         with QBittorrentClient(
@@ -235,29 +239,37 @@ def recheck(client: tuple[str], status: TorrentStatusesT | None, dry_run: bool):
                     )
 
 
+# This is not an actual status in qbittorrentapi, but it's a useful state to know about
+# for us: it's when a torrent has completed (either via download or recheck), but is
+# stopped and not seeding. None of the qbittorrentapi statuses capture this exactly.
+type StartTorrentStatusesT = TorrentStatusesT | Literal["completed_stopped"]
+
+# ugh, get_args does not work nicely on Literal unions
+start_torrent_statuses = list(get_args(TorrentStatusesT)) + ["completed_stopped"]
+
+
 @sb.command()
 @click.option(
-    "--client",
-    "-c",
-    multiple=True,
-    help="Specify which clients to add to",
-    required=True,
+    "client",
 )
 @click.option(
     "--status",
     "-s",
-    type=click.Choice(get_args(TorrentStatusesT)),
+    type=click.Choice(start_torrent_statuses),
     default=None,
     help="Filter torrents by status",
 )
 @click.option(
     "--dry-run", is_flag=True, help="Show what would be done without making changes"
 )
-def start(client: tuple[str], status: TorrentStatusesT | None, dry_run: bool):
-    """Start all torrents in specified CLIENT(s)."""
+def start(client: str, status: StartTorrentStatusesT | None, dry_run: bool):
+    """
+    Start all torrents in specified CLIENT. CLIENT may be a single client or many
+    separated by commas.
+    """
     config = Config.load_from_file()
 
-    for client_name in client:
+    for client_name in client.split(","):
         client_config = get_client_config(config, client_name)
 
         with QBittorrentClient(
@@ -268,9 +280,16 @@ def start(client: tuple[str], status: TorrentStatusesT | None, dry_run: bool):
         ) as qb_client:
             click.echo(f"Client '{client_name}'", err=True)
 
+            completed_stopped = False
+            if status == "completed_stopped":
+                completed_stopped = True
+                status = None
+
             torrents = qb_client.list_torrents(status=status)
 
             for torrent in torrents:
+                if completed_stopped and torrent.state != "stoppedUP":
+                    continue
                 if not dry_run:
                     click.echo(f"\t🏃‍➡️ Starting torrent {torrent.name}", err=True)
                     qb_client.start(torrent.hash)

@@ -2,9 +2,10 @@ from types import TracebackType
 from qbittorrentapi import Client
 from qbittorrentapi.torrents import TorrentStatusesT, TorrentFilesT
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal, cast, Iterable
 
 type AddResponse = Literal["Ok.", "Fails."]
+type HashList = str | Iterable[str] | None
 
 
 class FailedAddException(Exception):
@@ -38,7 +39,7 @@ class QBittorrentClient:
         response = cast(
             AddResponse,
             self.client.torrents_add(
-                torrent_files=path_or_data,
+                torrent_files=path_or_data,  # type: ignore
                 category=self.category,
                 is_paused=True,
             ),
@@ -60,22 +61,28 @@ class QBittorrentClient:
             self.category is None or self.category in self.client.torrents_categories()
         )
 
-    def list_torrents(self, status: TorrentStatusesT | None = None):
-        return self.client.torrents_info(category=self.category, status_filter=status)
+    def list_torrents(
+        self,
+        *,
+        status: TorrentStatusesT | None = None,
+        hashes: HashList = None,
+    ):
+        return self.client.torrents_info(
+            category=self.category, status_filter=status, hashes=hashes
+        )
 
-    def start_recheck(self, hash_hex: str):
+    def start_recheck(self, hashes: str):
         """
         Start a recheck for the torrent with the given hash.
 
         Note that this does not wait for the recheck to complete.
         """
-        self.client.torrents_recheck(hashes=hash_hex)
+        self.client.torrents_recheck(hashes=hashes)
 
-    def export(self, hash_hex: str) -> bytes:
+    def export(self, hashes: str) -> bytes:
         """Export the raw torrent data for the torrent with the given hash."""
-        return self.client.torrents_export(torrent_hash=hash_hex)
-    
+        return self.client.torrents_export(torrent_hash=hashes)
 
-    def start(self, hash_hex: str):
+    def start(self, hashes: str):
         """Start the torrent with the given hash."""
-        self.client.torrents_start(hashes=hash_hex)
+        self.client.torrents_start(hashes=hashes)
