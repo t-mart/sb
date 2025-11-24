@@ -227,13 +227,13 @@ def recheck(client: str, status: RecheckTorrentStatusesT | None, dry_run: bool):
     """
     config = Config.load_from_file()
 
+    downloading_stopped = False
+    if status == "downloading_stopped":
+        downloading_stopped = True
+        status = None
+
     for client_name in client.split(","):
         client_config = get_client_config(config, client_name)
-
-        downloading_stopped = False
-        if status == "downloading_stopped":
-            downloading_stopped = True
-            status = None
 
         with QBittorrentClient(
             host=client_config.url,
@@ -287,13 +287,13 @@ def start(client: str, status: StartTorrentStatusesT | None, dry_run: bool):
     """
     config = Config.load_from_file()
 
+    completed_stopped = False
+    if status == "completed_stopped":
+        completed_stopped = True
+        status = None
+
     for client_name in client.split(","):
         client_config = get_client_config(config, client_name)
-
-        completed_stopped = False
-        if status == "completed_stopped":
-            completed_stopped = True
-            status = None
 
         with QBittorrentClient(
             host=client_config.url,
@@ -307,6 +307,7 @@ def start(client: str, status: StartTorrentStatusesT | None, dry_run: bool):
 
             for torrent in torrents:
                 if not dry_run:
+                    print(torrent.state)
                     if completed_stopped and torrent.state != "stoppedUP":
                         continue
                     click.echo(f"\t🏃‍➡️ Starting torrent {torrent.name}", err=True)
