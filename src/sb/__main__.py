@@ -230,6 +230,11 @@ def recheck(client: str, status: RecheckTorrentStatusesT | None, dry_run: bool):
     for client_name in client.split(","):
         client_config = get_client_config(config, client_name)
 
+        downloading_stopped = False
+        if status == "downloading_stopped":
+            downloading_stopped = True
+            status = None
+
         with QBittorrentClient(
             host=client_config.url,
             username=client_config.username,
@@ -238,17 +243,12 @@ def recheck(client: str, status: RecheckTorrentStatusesT | None, dry_run: bool):
         ) as qb_client:
             click.echo(f"Client '{client_name}'", err=True)
 
-            downloading_stopped = False
-            if status == "downloading_stopped":
-                downloading_stopped = True
-                status = None
-
             torrents = qb_client.list_torrents(status=status)
 
             for torrent in torrents:
-                if downloading_stopped and torrent.state != "stoppedDL":
-                    continue
                 if not dry_run:
+                    if downloading_stopped and torrent.state != "stoppedDL":
+                        continue
                     qb_client.start_recheck(torrent.hash)
                     click.echo(f"\t🔍 Started recheck of {torrent.name}", err=True)
                 else:
@@ -290,6 +290,11 @@ def start(client: str, status: StartTorrentStatusesT | None, dry_run: bool):
     for client_name in client.split(","):
         client_config = get_client_config(config, client_name)
 
+        completed_stopped = False
+        if status == "completed_stopped":
+            completed_stopped = True
+            status = None
+
         with QBittorrentClient(
             host=client_config.url,
             username=client_config.username,
@@ -298,17 +303,12 @@ def start(client: str, status: StartTorrentStatusesT | None, dry_run: bool):
         ) as qb_client:
             click.echo(f"Client '{client_name}'", err=True)
 
-            completed_stopped = False
-            if status == "completed_stopped":
-                completed_stopped = True
-                status = None
-
             torrents = qb_client.list_torrents(status=status)
 
             for torrent in torrents:
-                if completed_stopped and torrent.state != "stoppedUP":
-                    continue
                 if not dry_run:
+                    if completed_stopped and torrent.state != "stoppedUP":
+                        continue
                     click.echo(f"\t🏃‍➡️ Starting torrent {torrent.name}", err=True)
                     qb_client.start(torrent.hash)
                 else:
