@@ -309,7 +309,6 @@ def start(client: str, status: StartTorrentStatusesT | None, dry_run: bool):
                 if not dry_run:
                     if completed_stopped and torrent.state != "stoppedUP":
                         continue
-                    print(torrent.state, torrent.name)
                     click.echo(f"\t🏃‍➡️ Starting torrent {torrent.name}", err=True)
                     qb_client.start(torrent.hash)
                 else:
