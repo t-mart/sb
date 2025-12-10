@@ -126,3 +126,9 @@ sb start aClient --status completed_stopped
 ### `lsc`
 
 List all configured clients as JSON.
+
+Example:
+
+```sh
+sb lsc
+```
