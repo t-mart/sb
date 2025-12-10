@@ -325,7 +325,7 @@ def start(client: str, status: StartTorrentStatusesT | None, dry_run: bool):
 
 
 @sb.command()
-def lsc(client: str, status: StartTorrentStatusesT | None, dry_run: bool):
+def lsc():
     """
     List all configured clients as JSON.
     """
