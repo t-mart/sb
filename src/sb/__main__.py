@@ -111,56 +111,63 @@ def add(client: str, torrent: tuple[Path], delete_after: bool, dry_run: bool):
     "--dry-run", is_flag=True, help="Show what would be done without making changes"
 )
 def cp(from_client: str, to_client: str, dry_run: bool):
-    """Copy all torrents from FROM_CLIENT to TO_CLIENT."""
+    """
+    Copy all torrents from FROM_CLIENT to TO_CLIENT.
+
+    TO_CLIENT may be a single client or many separated by commas.    
+    """
     config = Config.load_from_file()
     from_client_config = get_client_config(config, from_client)
-    to_client_config = get_client_config(config, to_client)
+    to_client_configs = {
+        name: get_client_config(config, name) for name in to_client.split(",")
+    }
 
-    with (
-        QBittorrentClient(
-            host=from_client_config.url,
-            username=from_client_config.username,
-            password=from_client_config.password,
-            category=from_client_config.category,
-        ) as from_qb,
-        QBittorrentClient(
-            host=to_client_config.url,
-            username=to_client_config.username,
-            password=to_client_config.password,
-            category=to_client_config.category,
-        ) as to_qb,
-    ):
-        click.echo(f"Copying torrents from '{from_client}' to '{to_client}'", err=True)
+    for name, config in to_client_configs.items():
+        with (
+            QBittorrentClient(
+                host=from_client_config.url,
+                username=from_client_config.username,
+                password=from_client_config.password,
+                category=from_client_config.category,
+            ) as from_qb,
+            QBittorrentClient(
+                host=config.url,
+                username=config.username,
+                password=config.password,
+                category=config.category,
+            ) as to_qb,
+        ):
+            click.echo(f"Copying torrents from '{from_client}' to '{name}'", err=True)
 
-        from_torrents = from_qb.list_torrents()
-        to_torrents = to_qb.list_torrents()
+            from_torrents = from_qb.list_torrents()
+            to_torrents = to_qb.list_torrents()
 
-        from_torrent_map = {t.hash: t for t in from_torrents}
+            from_torrent_map = {t.hash: t for t in from_torrents}
 
-        from_hashes = {t.hash for t in from_torrents}
-        to_hashes = {t.hash for t in to_torrents}
+            from_hashes = {t.hash for t in from_torrents}
+            to_hashes = {t.hash for t in to_torrents}
 
-        missing_hashes = from_hashes - to_hashes
+            missing_hashes = from_hashes - to_hashes
 
-        for missing_hash in missing_hashes:
-            torrent_data = from_qb.export(hashes=missing_hash)
-            torrent = from_torrent_map[missing_hash]
-            click.echo(f"\tAdding torrent: {torrent.name}", err=True)
+            for missing_hash in missing_hashes:
+                torrent_data = from_qb.export(hashes=missing_hash)
+                torrent = from_torrent_map[missing_hash]
+                click.echo(f"\tAdding torrent: {torrent.name}", err=True)
 
-            if dry_run:
-                click.echo("\t\tℹ️ Dry run, not adding", err=True)
-                continue
+                if dry_run:
+                    click.echo("\t\tℹ️ Dry run, not adding", err=True)
+                    continue
 
-            try:
-                to_qb.add_paused_torrent_by_data(
-                    torrent_data,
-                )
-            except FailedAddException:
-                click.echo("\t\t❌ Failed to add", err=True)
-                continue
-            click.echo("\t\t✅ Added successfully", err=True)
-            to_qb.start_recheck(hashes=missing_hash)
-            click.echo("\t\t🔍 Started recheck", err=True)
+                try:
+                    to_qb.add_paused_torrent_by_data(
+                        torrent_data,
+                    )
+                except FailedAddException:
+                    click.echo("\t\t❌ Failed to add", err=True)
+                    continue
+                click.echo("\t\t✅ Added successfully", err=True)
+                to_qb.start_recheck(hashes=missing_hash)
+                click.echo("\t\t🔍 Started recheck", err=True)
 
 
 @sb.command()

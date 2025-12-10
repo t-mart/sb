@@ -69,6 +69,8 @@ Add all torrents from FROM_CLIENT to TO_CLIENT that do not already exist on
 TO_CLIENT. Just like `add`, the torrents are added in a paused state and a
 recheck is run after adding.
 
+TO_CLIENT may be a single client or many separated by commas.
+
 Examples:
 
 ```sh
