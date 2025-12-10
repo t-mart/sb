@@ -114,7 +114,7 @@ def cp(from_client: str, to_client: str, dry_run: bool):
     """
     Copy all torrents from FROM_CLIENT to TO_CLIENT.
 
-    TO_CLIENT may be a single client or many separated by commas.    
+    TO_CLIENT may be a single client or many separated by commas.
     """
     config = Config.load_from_file()
     from_client_config = get_client_config(config, from_client)
@@ -322,6 +322,25 @@ def start(client: str, status: StartTorrentStatusesT | None, dry_run: bool):
                     click.echo(
                         f"\tℹ️ Dry run, not starting torrent {torrent.name}", err=True
                     )
+
+
+@sb.command()
+def lsc(client: str, status: StartTorrentStatusesT | None, dry_run: bool):
+    """
+    List all configured clients as JSON.
+    """
+    config = Config.load_from_file()
+
+    clients_dict: dict[str, dict[str, str | None]] = {
+        name: {
+            "url": client.url,
+            "username": client.username,
+            "category": client.category,
+        }
+        for name, client in config.clients.items()
+    }
+
+    click.echo(json.dumps(clients_dict, indent=2))
 
 
 def get_client_config(config: Config, client_name: str):
