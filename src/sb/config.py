@@ -9,7 +9,6 @@ class ClientConfig(BaseModel):
     url: str
     username: str
     password: str
-    category: str | None = None
 
 class Config(BaseModel):
     clients: dict[str, ClientConfig]

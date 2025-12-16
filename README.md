@@ -1,8 +1,8 @@
 # sb
 
-`sb` is a CLI that unlocks the expressivity of scripting against qBittorrent.
-The web UI is fine, but tedious for performing bulk operations across multiple
-instances.
+`sb` is a CLI for managing qBittorrent instances via their web UIs. It is handy
+for bulk operations, especially those that need to be coordinated across
+multiple instances.
 
 ## Installation
 
@@ -19,7 +19,6 @@ Config in toml format is stored in `~/.config/sb/config.toml`.
 host = "http://localhost:8080"
 username = "admin"
 password = "adminadmin"
-category = "redacted"
 
 [clients.bClient]
 host = "http://otherhost:8080"
@@ -30,8 +29,46 @@ password = "pass"
 Clients identify instances of qBittorrent running the web UI. Each client has a
 name (like `aClient` or `bClient` above) and connection details.
 
-You may also provide a category for a client. Doing so isolates all operations
-to that category. (This helps me because I utilize categories in my workflow.)
+## Statuses
+
+Many commands accept a `--status-filter` option to filter which torrents to
+operate on.
+
+The possible statuses are:
+
+- `all`: All torrents, regardless of state. (This is the same as not providing a
+  status filter at all.)
+- `downloading`: Downloading data
+- `seeding`: Uploading data
+- `active`: Uploading or downloading data
+- `inactive`: Neither uploading nor downloading data
+- `completed`: All data locally present (not necessarily seeding)
+- `stopped` or `paused`: Stopped by the user
+- `running` or `resumed`: Not stopped by the user
+- `stalled_uploading`: Not uploading
+- `stalled_downloading`: Not downloading
+- `stalled`: Not uploading nor downloading
+- `checking`: Being checked
+- `moving`: Being moved
+- `errored`: In an error state
+- `completed_stopped`: `stopped` and `completed`
+- `downloading_stopped`: `stopped` and not `completed`
+
+Note that many statuses are overlapping. For example, a torrent that is
+`seeding` is also `active` and `running`.
+
+## Categories
+
+Many commands accept a `--category-filter` option to filter which torrents to
+operate on.
+
+If the client utilizes subcategories, they are selected when specifying the
+parent category. For example, `--category-filter movies` will select torrents in
+torrents with categories `movies`, `movies/foo`, and `movies/bar`.
+
+Providing an empty string to `--category-filter` will select torrents with no
+category. To select all torrents regardless of category, do not provide the
+option at all.
 
 ## Subcommands
 
@@ -71,6 +108,9 @@ recheck is run after adding.
 
 TO_CLIENT may be a single client or many separated by commas.
 
+The category of the torrents on FROM_CLIENT is preserved when adding to
+TO_CLIENT.
+
 Examples:
 
 ```sh
@@ -79,7 +119,8 @@ sb cp aClient bClient
 
 ### `ls`
 
-List all torrents in a given qbittorrent instance as JSON.
+List all torrents in a given qbittorrent instance as JSON. May provide zero or
+more hashes to select particular torrents.
 
 May also provide torrent hashes to select particular torrents. Accepts a
 `--status` option to filter which torrents to list.
@@ -90,21 +131,23 @@ Example:
 sb ls aClient
 ```
 
+```sh
+sb ls aClient --status-filter seeding
+```
+
+```sh
+sb ls aClient c5e4ca57a767df5cdda3866f43d224925a2a16ab
+```
+
 ### `recheck`
 
 Start a recheck on all torrents for client, which can be a single client or many
 separated by commas.
 
-Takes a `--status` option to filter which torrents to recheck. Specially for
-this command, the status can also be `downloading_stopped`, which matches
-torrents that are stopped but have an unknown or unfinished download state. In
-other words, `downloading_stopped` matches torrents that are new or did not
-succeed in a recheck.
-
 Example:
 
 ```sh
-sb recheck aClient --status downloading_stopped
+sb recheck aClient --status-filter downloading_stopped
 ```
 
 ### `start`
@@ -112,15 +155,10 @@ sb recheck aClient --status downloading_stopped
 Start all torrents for client, which can be a single client or many separated by
 commas.
 
-Takes a `--status` option to filter which torrents to start. Specially for this
-command, the status can also be `completed_stopped` which matches torrents that
-are stopped but are known to be complete. In other words, `completed_stopped`
-matches torrents that were previously `sb add`ed or `sb cp`ed.
-
 Example:
 
 ```sh
-sb start aClient --status completed_stopped
+sb start aClient --status-filter completed_stopped
 ```
 
 ### `lsc`
