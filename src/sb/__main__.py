@@ -202,7 +202,8 @@ def cp(
 
                 click.echo("\t\t✅ Copied successfully", err=True)
 
-            to_qb.start_recheck(hashes=recheck_hashes)
+            if not dry_run:
+                to_qb.start_recheck(hashes=recheck_hashes)
 
     from_qb.logout()
 
